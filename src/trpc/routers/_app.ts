@@ -3,6 +3,7 @@ import { baseProcedure, createTRPCRouter } from "../init";
 import { inngest } from "@/inngest/client";
 
 export const appRouter = createTRPCRouter({
+  // Example: Inngest Event Invocation using trpc
   invoke: baseProcedure
     .input(
       z.object({
@@ -15,6 +16,7 @@ export const appRouter = createTRPCRouter({
         data: { email: opts.input.text },
       });
     }),
+    // Example: Trpc Query
   hello: baseProcedure
     .input(
       z.object({
