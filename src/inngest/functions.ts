@@ -1,12 +1,12 @@
 import { inngest } from "./client";
-import { Agent, openai, createAgent } from "@inngest/agent-kit";
+import { Agent, openai, createAgent, createNetwork } from "@inngest/agent-kit";
 import { createTool } from "@inngest/agent-kit";
 
 import { Sandbox } from "@e2b/code-interpreter";
-import { getSandbox } from "./utils";
+import { getSandbox, lastAssistantMessageContent } from "./utils";
 
 import { z } from "zod";
-import { get } from "node:http";
+import { PROMPT } from "@/app/prompts";
 
 // ! Inngest Function
 export const helloWorld = inngest.createFunction(
@@ -24,9 +24,14 @@ export const helloWorld = inngest.createFunction(
     // ! Agent Creation
     const codeAgent = createAgent({
       name: "codeAgent",
-      system:
-        "You are an expert NextJs Developer. You write readable and maintainable code. You write simple NextJs & React code snippets.",
-      model: openai({ model: "gpt-4o" }),
+      description: "An Expert coding agent",
+      system: PROMPT,
+      model: openai({
+        model: "gpt-4.1",
+        defaultParameters: {
+          temperature: 0.1,
+        },
+      }),
       tools: [
         createTool({
           name: "terminal",
@@ -86,20 +91,74 @@ export const helloWorld = inngest.createFunction(
                 } catch (err) {
                   return `Error creating or updating files: ${err}`;
                 }
+              }
+            );
 
-                if( typeof newFiles === "object"){  // we dont want to store string in state
-                  network.state.data.files = newFiles;
+            // Update network state after step completes
+            if (typeof newFiles === "object") {
+              // we dont want to store string in state
+              network.state.data.files = newFiles;
+            }
+          },
+        }),
+        createTool({
+          name: "readFile",
+          description: "Reads a file from the code interpreter sandbox",
+          parameters: z.object({
+            files: z.array(z.string()),
+          }),
+          handler: async ({ files }, { step }) => {
+            return await step?.run("readFiles", async () => {
+              try {
+                const sandbox = await getSandbox(sandboxId);
+                const contents = [];
+                for (const file of files) {
+                  const content = await sandbox.files.read(file);
+                  contents.push({ path: file, content });
                 }
-
-              });
+                return JSON.stringify(contents);
+              } catch (err) {
+                return `Error reading files: ${err}`;
+              }
+            });
           },
         }),
       ],
+      lifecycle: {
+        onResponse: async ({ result, network }) => {
+          const lastAssistantMessageText = lastAssistantMessageContent(result);
+          if (lastAssistantMessageText && network) {
+            if (lastAssistantMessageText.includes("</task_summary>")) {
+              network.state.data.summary = lastAssistantMessageText;
+            }
+          }
+          return result;
+        },
+      },
     });
-    const { output } = await codeAgent.run(
-      ` Write the following snippets : ${event.data.value}`
-    );
-    console.log(`code: ${output}`);
+
+    // !  Network Creation
+    const network = createNetwork({
+      name: "coding-agent-network",
+      agents: [codeAgent],
+      maxIter: 15, // max iterations (so that it doesn't run forever)
+      router: async ({ network }) => {
+        const summary = network.state.data.summary;
+        if (summary) {
+          return;
+        }
+        return codeAgent;
+      },
+    });
+
+    // old
+    // const { output } = await codeAgent.run(
+    //   ` Write the following snippets : ${event.data.value}`
+    // );
+    // console.log(`code: ${output}`);
+
+    // ! new | Run Network
+    const result = await network.run(event.data.value);
 
     const sandboxUrl = await step.run("get-sandbox-url", async () => {
       const sandbox = await getSandbox(sandboxId);
@@ -109,6 +168,11 @@ export const helloWorld = inngest.createFunction(
 
     console.log(`Sandbox URL: ${sandboxUrl}`);
 
-    return { code: output, sandboxUrl };
+    return {
+      url: sandboxUrl,
+      title: "Fragment",
+      files: result.state.data.files,
+      summary: result.state.data.summary,
+    };
   }
 );
