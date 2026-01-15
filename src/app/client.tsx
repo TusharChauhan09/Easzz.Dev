@@ -8,5 +8,5 @@ export function Client() {
     const { data } = useSuspenseQuery(trpc.hello.queryOptions({text:"client component"}));
     return(
         <div>{JSON.stringify(data)}</div>
-    );
+    ); 
 }
