@@ -520,6 +520,46 @@ npx inngest-cli@latest dev
 | Inngest Dev Server | http://localhost:8288          |
 | tRPC API           | http://localhost:3000/api/trpc |
 
+### E2B Sandbox Management
+
+The project uses a custom E2B sandbox template for the Next.js environment.
+
+#### Prerequisites
+
+1. Install the E2B CLI:
+
+```bash
+npm install -g @e2b/cli
+```
+
+2. Login to your E2B account:
+
+```bash
+e2b auth login
+```
+
+#### Building the Sandbox Template
+
+If you modify files in `sanbox-templates/nextjs/`, you must rebuild the template:
+
+```bash
+cd sanbox-templates/nextjs
+e2b template build
+```
+
+This will update the template configuration and make the new environment available to your agents.
+
+### Viewing Sandbox Output
+
+When the AI agent successfully generates code:
+
+1. The application calculates the Preview URL (`https://<sandbox-id>-3000.use.e2b.dev`).
+2. This URL is returned to the frontend.
+3. Click the generated link in the Chat UI to view the running application.
+
+**Note on Localhost:**
+The sandbox runs in the cloud. References to "localhost" (e.g., `localhost:3000`) inside the sandbox environment are exposed via the secure E2B tunnel URL. You do not access them via your local machine's `localhost:3000`. Instead, use the provided E2B URL.
+
 ---
 
 ## 📄 Key Files Explained
