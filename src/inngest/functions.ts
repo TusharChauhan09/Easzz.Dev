@@ -2,6 +2,7 @@ import { inngest } from "./client";
 import { Agent, openai, createAgent, createNetwork } from "@inngest/agent-kit";
 import { createTool } from "@inngest/agent-kit";
 
+import prisma from "@/lib/db";
 import { Sandbox } from "@e2b/code-interpreter";
 import { getSandbox, lastAssistantMessageContent } from "./utils";
 
@@ -56,7 +57,7 @@ export const helloWorld = inngest.createFunction(
                 return result.stdout;
               } catch (err) {
                 console.error(
-                  `Command failed: ${err} \n stdout: ${buffer.stdout} \n stderr: ${buffer.stderr}`
+                  `Command failed: ${err} \n stdout: ${buffer.stdout} \n stderr: ${buffer.stderr}`,
                 );
 
                 return `Command failed: ${err}\n stdout: ${buffer.stdout}\n stderr: ${buffer.stderr}`;
@@ -73,7 +74,7 @@ export const helloWorld = inngest.createFunction(
               z.object({
                 path: z.string(),
                 content: z.string(),
-              })
+              }),
             ),
           }),
           handler: async ({ files }, { step, network }) => {
@@ -91,7 +92,7 @@ export const helloWorld = inngest.createFunction(
                 } catch (err) {
                   return `Error creating or updating files: ${err}`;
                 }
-              }
+              },
             );
 
             // Update network state after step completes
@@ -168,11 +169,28 @@ export const helloWorld = inngest.createFunction(
 
     console.log(`Sandbox URL: ${sandboxUrl}`);
 
+    await step.run("save-result", async () => {
+      return await prisma.message.create({
+        data: {
+          content: result.state.data.summary,
+          role: "ASSISTANT",
+          type: "RESULT",
+          fragment: {
+            create: {
+              sandboxUrl: sandboxUrl,
+              files: result.state.data.files,
+              title: "Fragment",
+            },
+          },
+        },
+      });
+    });
+
     return {
       url: sandboxUrl,
       title: "Fragment",
       files: result.state.data.files,
       summary: result.state.data.summary,
     };
-  }
+  },
 );
